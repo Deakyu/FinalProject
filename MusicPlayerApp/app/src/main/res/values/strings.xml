@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">MusicPlayerApp</string>
+    <string name="permission_title">Media Access Permission</string>
+    <string name="permission_info">The app needs the permission to retrieve music. Select Deny if you don\'t want to proceed</string>
+    <string name="allow">Allow</string>
+    <string name="deny">Deny</string>
+    <string name="exit_app">Exiting App...</string>
+</resources>
