@@ -210,4 +210,9 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         }
     }
 
+
+    private void dummy() {
+        System.out.println("Delete this function!!!!");
+    }
+
 }
