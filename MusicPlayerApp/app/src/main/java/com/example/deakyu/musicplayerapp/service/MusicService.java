@@ -2,6 +2,8 @@ package com.example.deakyu.musicplayerapp.service;
 
 import android.app.PendingIntent;
 import android.app.Service;
+import android.arch.lifecycle.Observer;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.BroadcastReceiver;
 import android.content.ContentUris;
 import android.content.Context;
@@ -29,8 +31,11 @@ import android.widget.Toast;
 
 import com.example.deakyu.musicplayerapp.MainActivity;
 import com.example.deakyu.musicplayerapp.R;
+import com.example.deakyu.musicplayerapp.database.MusicRepository;
 import com.example.deakyu.musicplayerapp.model.Song;
+import com.example.deakyu.musicplayerapp.viewmodel.SongViewModel;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MusicService extends Service implements MediaPlayer.OnPreparedListener,
@@ -38,19 +43,22 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         MediaPlayer.OnCompletionListener,
         MediaPlayer.OnSeekCompleteListener{
 
+    private static final String TAG = MusicService.class.getSimpleName();
+
     private final IBinder mBinder = new MyBinder();
     private MediaPlayer mediaPlayer = null;
-    private static final String TAG = MusicService.class.getSimpleName();
 
     private Song curSong;
     private int curIndex;
     private List<Song> songsFromDb;
-
     private int resumePosition;
 
+    // Notification Intent actions
     public static final String ACTION_PLAY = "com.example.musicplayerapp.ACTION_PLAY";
     public static final String ACTION_PAUSE = "com.example.musicplayerapp.ACTION_PAUSE";
     public static final String ACTION_STOP = "com.example.musicplayerapp.ACTION_STOP";
+    public static final String ACTION_NEXT = "com.example.musicplayerapp.ACTION_NEXT";
+    public static final String ACTION_PREV = "com.example.musicplayerapp.ACTION_PREV";
     public static final String BROADCAST_MEDIA_READY = "com.example.musicplayerapp.MEDIA_READY";
 
     //MediaSession
@@ -190,8 +198,6 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         notificationManager.cancel(NOTIFICATION_ID);
     }
 
-    // endregion
-
     private PendingIntent playbackAction(int actionNumber) {
         Intent playbackAction = new Intent(this, MusicService.class);
         switch (actionNumber) {
@@ -206,6 +212,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         }
         return null;
     }
+
+    // endregion
 
     private void handleIncomingActions(Intent playbackAction) {
         if(playbackAction == null || playbackAction.getAction() == null) return;
@@ -225,13 +233,13 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public void onPrepared(MediaPlayer mediaPlayer) {
         Toast.makeText(getApplicationContext(), "onPrepared MediaPlayer", Toast.LENGTH_SHORT).show();
-        sendPreparedBroadcast(mediaPlayer);
+        sendPreparedBroadcast();
         playMusic();
     }
 
     private LocalBroadcastManager mLocalBroadcastManager;
 
-    private void sendPreparedBroadcast(MediaPlayer mediaPlayer) {
+    private void sendPreparedBroadcast() {
         Intent intent = new Intent(BROADCAST_MEDIA_READY);
         mLocalBroadcastManager.sendBroadcast(intent);
     }
@@ -295,12 +303,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     }
 
     private void skipToNext() {
-        // TODO:
-        if(curIndex >= songsFromDb.size()-1) {
-            curIndex = 0;
-        } else {
-            curIndex++;
-        }
+        curIndex = curIndex >= songsFromDb.size()-1 ? 0 : curIndex+1;
         curSong = songsFromDb.get(curIndex);
 
         stopMusic();
@@ -309,25 +312,12 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     }
 
     private void skipToPrevious() {
-        // TODO:
-        if(curIndex <= 0) {
-            curIndex = songsFromDb.size()-1;
-        } else {
-            curIndex--;
-        }
+        curIndex = curIndex <= 0 ? songsFromDb.size()-1 : curIndex-1;
         curSong = songsFromDb.get(curIndex);
 
         stopMusic();
         mediaPlayer.reset();
         initMediaPlayer();
-    }
-
-    public int getDuration() {
-        return mediaPlayer.getDuration();
-    }
-
-    public int getCurrentPosition() {
-        return mediaPlayer.getCurrentPosition();
     }
 
     public void playNewAudio(int songIndex) {
@@ -336,7 +326,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             curSong = songsFromDb.get(curIndex);
         } catch (NullPointerException e){
             e.printStackTrace();
-            Toast.makeText(getApplicationContext(), "Error retrieving the song!", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "Music Not Found", Toast.LENGTH_SHORT).show();
         }
         if(curSong != null) {
             stopMusic();
@@ -348,11 +338,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     }
 
     public void pauseAudio() { transportControls.pause(); }
-
     public void resumeAudio() { transportControls.play(); }
-
     public void nextAudio() { transportControls.skipToNext(); }
-
     public void prevAudio() { transportControls.skipToPrevious(); }
 
     public void seekTo(int pos) {
@@ -360,9 +347,22 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         transportControls.seekTo(pos);
     }
 
+    public int getDuration() {
+        return mediaPlayer.getDuration();
+    }
+    public int getCurrentPosition() {
+        return mediaPlayer.getCurrentPosition();
+    }
+
     // endregion
 
     // region Service LifeCycle
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -389,12 +389,6 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         handleIncomingActions(intent);
 
         return super.onStartCommand(intent, flags, startId);
-    }
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
     }
 
     @Override

@@ -25,4 +25,6 @@ public class SongViewModel extends AndroidViewModel {
 
     public void insert(Song song) { mRepository.insertSong(song); }
 
+    public void deleteAll() { mRepository.deleteAllSongs(); }
+
 }
