@@ -20,6 +20,7 @@ import android.provider.MediaStore;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaControllerCompat;
 import android.support.v4.media.session.MediaSessionCompat;
@@ -29,6 +30,8 @@ import android.widget.Toast;
 import com.example.deakyu.musicplayerapp.MainActivity;
 import com.example.deakyu.musicplayerapp.R;
 import com.example.deakyu.musicplayerapp.model.Song;
+
+import java.util.List;
 
 public class MusicService extends Service implements MediaPlayer.OnPreparedListener,
         MediaPlayer.OnErrorListener,
@@ -40,6 +43,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     private static final String TAG = MusicService.class.getSimpleName();
 
     private Song curSong;
+    private int curIndex;
+    private List<Song> songsFromDb;
 
     private int resumePosition;
 
@@ -103,6 +108,22 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
                 super.onPause();
                 pauseMusic();
                 buildNotification(PlaybackStatus.PAUSED);
+            }
+
+            @Override
+            public void onSkipToNext() {
+                super.onSkipToNext();
+                skipToNext();
+                updateMetadata();
+                buildNotification(PlaybackStatus.PLAYING);
+            }
+
+            @Override
+            public void onSkipToPrevious() {
+                super.onSkipToPrevious();
+                skipToPrevious();
+                updateMetadata();
+                buildNotification(PlaybackStatus.PLAYING);
             }
 
             @Override
@@ -263,6 +284,35 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             mediaPlayer.start();
         }
     }
+
+    private void skipToNext() {
+        // TODO:
+        if(curIndex >= songsFromDb.size()-1) {
+            curIndex = 0;
+        } else {
+            curIndex++;
+        }
+        curSong = songsFromDb.get(curIndex);
+
+        stopMusic();
+        mediaPlayer.reset();
+        initMediaPlayer();
+    }
+
+    private void skipToPrevious() {
+        // TODO:
+        if(curIndex <= 0) {
+            curIndex = songsFromDb.size()-1;
+        } else {
+            curIndex--;
+        }
+        curSong = songsFromDb.get(curIndex);
+
+        stopMusic();
+        mediaPlayer.reset();
+        initMediaPlayer();
+    }
+
     // endregion
 
     // region Service LifeCycle
@@ -271,7 +321,9 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     public int onStartCommand(Intent intent, int flags, int startId) {
 
         try {
-            curSong = intent.getExtras().getParcelable("curSong");
+            curIndex = intent.getIntExtra("songIndex", 0);
+            songsFromDb = intent.getParcelableArrayListExtra("songs");
+            curSong = songsFromDb.get(curIndex);
         } catch(NullPointerException e) {
             stopSelf();
         }
@@ -295,7 +347,12 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public void onCreate() {
         super.onCreate();
+        mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
         registerPlayNewAudioReceiver();
+        registerPauseAudioReceiver();
+        registerResumeAudioReceiver();
+        registerPlayNextReceiver();
+        registerPlayPrevReceiver();
     }
 
     @Override
@@ -307,7 +364,11 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             mediaPlayer.release();
         }
 
-        unregisterReceiver(playNewAudio);
+        mLocalBroadcastManager.unregisterReceiver(playNewAudio);
+        mLocalBroadcastManager.unregisterReceiver(pauseAudio);
+        mLocalBroadcastManager.unregisterReceiver(resumeAudio);
+        mLocalBroadcastManager.unregisterReceiver(nextAudio);
+        mLocalBroadcastManager.unregisterReceiver(prevAudio);
         removeNotification();
     }
 
@@ -315,11 +376,14 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     // region Broadcast Receivers
 
+    private LocalBroadcastManager mLocalBroadcastManager;
+
     private BroadcastReceiver playNewAudio = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             try {
-                curSong = intent.getExtras().getParcelable("curSong");
+                curIndex = intent.getIntExtra("songIndex", 0);
+                curSong = songsFromDb.get(curIndex);
             } catch (NullPointerException e){
                 e.printStackTrace();
                 Toast.makeText(context, "Error retrieving the song!", Toast.LENGTH_SHORT).show();
@@ -334,9 +398,57 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         }
     };
 
+    private BroadcastReceiver pauseAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            transportControls.pause();
+        }
+    };
+
+    private BroadcastReceiver resumeAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            transportControls.play();
+        }
+    };
+
+    private BroadcastReceiver nextAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            transportControls.skipToNext();
+        }
+    };
+
+    private BroadcastReceiver prevAudio = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            transportControls.skipToPrevious();
+        }
+    };
+
     private void registerPlayNewAudioReceiver() {
         IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_NEW_AUDIO);
-        registerReceiver(playNewAudio, filter);
+        mLocalBroadcastManager.registerReceiver(playNewAudio, filter);
+    }
+
+    private void registerPauseAudioReceiver() {
+        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PAUSE_AUDIO);
+        mLocalBroadcastManager.registerReceiver(pauseAudio, filter);
+    }
+
+    private void registerResumeAudioReceiver() {
+        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_RESUME_AUDIO);
+        mLocalBroadcastManager.registerReceiver(resumeAudio, filter);
+    }
+
+    private void registerPlayNextReceiver() {
+        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_NEXT);
+        mLocalBroadcastManager.registerReceiver(nextAudio, filter);
+    }
+
+    private void registerPlayPrevReceiver() {
+        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_PREV);
+        mLocalBroadcastManager.registerReceiver(prevAudio, filter);
     }
 
     // endregion

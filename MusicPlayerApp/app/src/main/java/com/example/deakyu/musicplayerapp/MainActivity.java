@@ -15,6 +15,7 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -22,6 +23,10 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.deakyu.musicplayerapp.adapter.ItemClickListener;
@@ -30,21 +35,38 @@ import com.example.deakyu.musicplayerapp.service.MusicService;
 import com.example.deakyu.musicplayerapp.model.Song;
 import com.example.deakyu.musicplayerapp.viewmodel.SongViewModel;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements ItemClickListener {
 
     public static final String BROADCAST_PLAY_NEW_AUDIO = "com.example.musicplayerapp.PlayNewAudio";
+    public static final String BROADCAST_PAUSE_AUDIO = "com.example.musicplayerapp.PauseAudio";
+    public static final String BROADCAST_RESUME_AUDIO = "com.example.musicplayerapp.ResumeAudio";
+    public static final String BROADCAST_PLAY_NEXT = "com.example.musicplayerapp.PlayNext";
+    public static final String BROADCAST_PLAY_PREV = "com.example.musicplayerapp.PlayPrev";
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int EXTERNAL_STORAGE_PERMISSION_REQUEST = 1;
 
+    private LocalBroadcastManager mLocalBroadcastManager;
+
     List<Song> songList;
     List<Song> songsFromDb;
+    int curPos;
     MusicService musicService;
     boolean serviceBound = false;
 
     private SongListAdapter adapter;
     private SongViewModel songViewModel;
+
+    private ImageButton pauseBtn;
+    private ImageButton playBtn;
+    private ImageButton skipPrevBtn;
+    private ImageButton skipNextBtn;
+    private ImageView album;
+    private TextView mediaTitle;
+    private TextView mediaArtist;
+    private SeekBar progressBar;
 
     // region Activity LifeCycle
 
@@ -53,8 +75,10 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
         setRecyclerView();
         setSongViewModel();
+        setMediaControls();
 
         executeRuntimePermission(); // Don't try to access files from here below
     }
@@ -163,8 +187,63 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
     @Override
     public void onClick(View view, int pos) {
-        Song clickedSong = songsFromDb.get(pos);
-        playAudio(clickedSong);
+        curPos = pos;
+        playAudio(pos);
+    }
+
+    private void setMediaControls() {
+        album = findViewById(R.id.album);
+        mediaTitle = findViewById(R.id.media_title);
+        mediaArtist = findViewById(R.id.media_artist);
+        pauseBtn = findViewById(R.id.media_pause);
+        playBtn = findViewById(R.id.media_play);
+        skipNextBtn = findViewById(R.id.skip_next);
+        skipPrevBtn = findViewById(R.id.skip_prev);
+        progressBar = findViewById(R.id.progress_bar);
+
+        pauseBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pauseBtn.setVisibility(View.GONE);
+                playBtn.setVisibility(View.VISIBLE);
+                Intent pauseAudioIntent = new Intent(BROADCAST_PAUSE_AUDIO);
+                mLocalBroadcastManager.sendBroadcast(pauseAudioIntent);
+            }
+        });
+
+        playBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pauseBtn.setVisibility(View.VISIBLE);
+                playBtn.setVisibility(View.GONE);
+                Intent resumeAudioIntent = new Intent(BROADCAST_RESUME_AUDIO);
+                mLocalBroadcastManager.sendBroadcast(resumeAudioIntent);
+            }
+        });
+
+        skipNextBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(curPos >= songsFromDb.size() - 1) {
+                    curPos = 0;
+                } else {
+                    curPos++;
+                }
+                playNext(curPos);
+            }
+        });
+
+        skipPrevBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(curPos <= 0) {
+                    curPos = songsFromDb.size()-1;
+                } else {
+                    curPos--;
+                }
+                playPrev(curPos);
+            }
+        });
     }
 
     // endregion
@@ -183,17 +262,46 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         }
     };
 
-    private void playAudio(Song song) {
+    private void playAudio(int songIndex) {
         if(!serviceBound) { // start a fresh service
             Intent intent = new Intent(this, MusicService.class);
-            intent.putExtra("curSong", song);
+//            intent.putExtra("curSong", song);
+            intent.putParcelableArrayListExtra("songs", (ArrayList)songsFromDb);
+            intent.putExtra("songIndex", songIndex);
             startService(intent);
             bindService(intent, musicServiceConnection, Context.BIND_AUTO_CREATE);
+
+            setUIAfterPlay(songIndex);
         } else { // Service is already running, so put different Song object
             Intent newAudioIntent = new Intent(BROADCAST_PLAY_NEW_AUDIO);
-            newAudioIntent.putExtra("curSong", song);
-            sendBroadcast(newAudioIntent);
+            newAudioIntent.putExtra("songIndex", songIndex);
+            mLocalBroadcastManager.sendBroadcast(newAudioIntent);
+
+            setUIAfterPlay(songIndex);
         }
+    }
+
+    private void playNext(int songIndex) {
+        Intent playNextIntent = new Intent(BROADCAST_PLAY_NEXT);
+        mLocalBroadcastManager.sendBroadcast(playNextIntent);
+
+        setUIAfterPlay(songIndex);
+    }
+
+    private void playPrev(int songIndex) {
+        Intent playPrevIntent = new Intent(BROADCAST_PLAY_PREV);
+        mLocalBroadcastManager.sendBroadcast(playPrevIntent);
+
+        setUIAfterPlay(songIndex);
+    }
+
+    private void setUIAfterPlay(int songIndex) {
+        playBtn.setVisibility(View.GONE);
+        pauseBtn.setVisibility(View.VISIBLE);
+
+        mediaTitle.setText(songsFromDb.get(songIndex).getTitle());
+        mediaArtist.setText(songsFromDb.get(songIndex).getArtist());
+        // TODO: https://stackoverflow.com/questions/17573972/how-can-i-display-album-art-using-mediastore-audio-albums-album-art/38873747
     }
 
 }

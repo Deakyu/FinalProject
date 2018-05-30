@@ -13,12 +13,12 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
         card_view:cardUseCompatPadding="true"
-        card_view:cardElevation="4dp"
+        card_view:cardElevation="2dp"
         card_view:cardCornerRadius="2dp">
 
         <android.support.constraint.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="100dp"
             android:padding="16dp">
 
             <ImageView
@@ -32,11 +32,14 @@
 
             <TextView
                 android:id="@+id/media_title"
-                android:layout_width="wrap_content"
+                android:layout_width="120dp"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="16dp"
                 android:text="Title"
                 android:textSize="18sp"
+                android:inputType="textMultiLine"
+                android:minLines="2"
+                android:maxLines="2"
                 app:layout_constraintTop_toTopOf="parent"
                 app:layout_constraintLeft_toRightOf="@id/album"
                 app:layout_constraintBottom_toTopOf="@id/media_artist"/>
