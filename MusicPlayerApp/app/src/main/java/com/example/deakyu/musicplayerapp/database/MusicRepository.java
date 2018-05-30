@@ -14,8 +14,10 @@ public class MusicRepository {
 
     private LiveData<List<Song>> mAllSongs;
 
+    private MusicDatabase db;
+
     public MusicRepository(Application app) {
-        MusicDatabase db = MusicDatabase.getDatabase(app);
+        db = MusicDatabase.getDatabase(app);
         mSongDao = db.songDao();
 
         mAllSongs = mSongDao.getAllSongs();
@@ -26,6 +28,10 @@ public class MusicRepository {
     public void insertSong(Song song) { new insertSongAsync(mSongDao).execute(song); }
 
     public void deleteAllSongs() { new deleteSongsAsync(mSongDao).execute(); }
+
+    public void refreshSongs(final List<Song> newSongs) {
+        new refreshSongsAsync(db, this).execute(newSongs);
+    }
 
     private static class insertSongAsync extends AsyncTask<Song, Void, Void> {
         private SongDao mAsyncSongDao;
@@ -49,6 +55,31 @@ public class MusicRepository {
         @Override
         protected Void doInBackground(Void... voids) {
             mAsyncSongDao.deleteAll();
+            return null;
+        }
+    }
+
+    private static class refreshSongsAsync extends AsyncTask<List<Song>, Void, Void> {
+
+        private MusicDatabase db;
+        private MusicRepository repo;
+
+        refreshSongsAsync(MusicDatabase db, MusicRepository repo) {
+            this.db = db;
+            this.repo = repo;
+        }
+
+        @Override
+        protected Void doInBackground(final List<Song>... lists) {
+            db.runInTransaction(new Runnable() {
+                @Override
+                public void run() {
+                    repo.deleteAllSongs();
+                    for(int i=0 ; i < lists[0].size() ; i++) {
+                        repo.insertSong(lists[0].get(i));
+                    }
+                }
+            });
             return null;
         }
     }

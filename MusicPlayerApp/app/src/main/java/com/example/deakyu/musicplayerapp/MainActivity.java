@@ -34,6 +34,7 @@ import android.widget.Toast;
 
 import com.example.deakyu.musicplayerapp.adapter.ItemClickListener;
 import com.example.deakyu.musicplayerapp.adapter.SongListAdapter;
+import com.example.deakyu.musicplayerapp.database.StorageUtil;
 import com.example.deakyu.musicplayerapp.service.MusicService;
 import com.example.deakyu.musicplayerapp.model.Song;
 import com.example.deakyu.musicplayerapp.viewmodel.SongViewModel;
@@ -43,11 +44,6 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements ItemClickListener {
 
-    public static final String BROADCAST_PLAY_NEW_AUDIO = "com.example.musicplayerapp.PlayNewAudio";
-    public static final String BROADCAST_PAUSE_AUDIO = "com.example.musicplayerapp.PauseAudio";
-    public static final String BROADCAST_RESUME_AUDIO = "com.example.musicplayerapp.ResumeAudio";
-    public static final String BROADCAST_PLAY_NEXT = "com.example.musicplayerapp.PlayNext";
-    public static final String BROADCAST_PLAY_PREV = "com.example.musicplayerapp.PlayPrev";
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int EXTERNAL_STORAGE_PERMISSION_REQUEST = 1;
 
@@ -162,10 +158,12 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private void continueWithPermission() { // Permission granted, proceed to work
         songList = MediaHelper.getMusicFromStorage(this); // Songs from storage
 
+
+        songViewModel.refreshSongs(songList);
         // TODO: Strategy to only insert these for the first time the user enters the app
-        for(int i=0 ; i < songList.size() ; i++) {
-            songViewModel.insert(songList.get(i));
-        }
+//        for(int i=0 ; i < songList.size() ; i++) {
+//            songViewModel.insert(songList.get(i));
+//        }
     }
 
     // endregion
@@ -288,28 +286,39 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         }
     };
 
+    private StorageUtil util;
+
     private void playAudio(int songIndex) {
         if(!serviceBound) { // start a fresh service
             Intent intent = new Intent(this, MusicService.class);
-            intent.putParcelableArrayListExtra("songs", (ArrayList)songsFromDb);
             intent.putExtra("songIndex", songIndex);
+
+            util = new StorageUtil(getApplicationContext());
+            util.storeSongs(songsFromDb);
+            util.storeSongIndex(songIndex);
+
             startService(intent);
             bindService(intent, musicServiceConnection, Context.BIND_AUTO_CREATE);
-
             setUIAfterPlay(songIndex);
         } else { // Service is already running, so put different Song object
-            musicService.playNewAudio(songIndex);
+            util = new StorageUtil(getApplicationContext());
+            util.storeSongIndex(songIndex);
 
+            musicService.playNewAudio();
             setUIAfterPlay(songIndex);
         }
     }
 
     private void playNext(int songIndex) {
+        util = new StorageUtil(getApplicationContext());
+        util.storeSongIndex(songIndex);
         if(serviceBound) musicService.nextAudio();
         setUIAfterPlay(songIndex);
     }
 
     private void playPrev(int songIndex) {
+        util = new StorageUtil(getApplicationContext());
+        util.storeSongIndex(songIndex);
         if(serviceBound) musicService.prevAudio();
         setUIAfterPlay(songIndex);
     }
@@ -328,6 +337,10 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         public void onReceive(Context context, Intent intent) {
             int duration = musicService.getDuration();
             String strDuration = MediaHelper.convertDurationToString(duration);
+            int currentSongIndex = musicService.getCurrentSongIndex();
+
+            setUIAfterPlay(currentSongIndex);
+
             totalDuration.setText(strDuration);
             progressBar.setMax(duration);
             mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 0);

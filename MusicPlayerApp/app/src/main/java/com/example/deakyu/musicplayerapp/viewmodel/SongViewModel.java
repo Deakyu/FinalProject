@@ -27,4 +27,6 @@ public class SongViewModel extends AndroidViewModel {
 
     public void deleteAll() { mRepository.deleteAllSongs(); }
 
+    public void refreshSongs(List<Song> newSongs) { mRepository.refreshSongs(newSongs); }
+
 }

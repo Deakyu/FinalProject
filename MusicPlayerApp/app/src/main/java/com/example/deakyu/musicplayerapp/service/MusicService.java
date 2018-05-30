@@ -2,13 +2,9 @@ package com.example.deakyu.musicplayerapp.service;
 
 import android.app.PendingIntent;
 import android.app.Service;
-import android.arch.lifecycle.Observer;
-import android.arch.lifecycle.ViewModelProviders;
-import android.content.BroadcastReceiver;
 import android.content.ContentUris;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.AudioManager;
@@ -29,13 +25,10 @@ import android.support.v4.media.session.MediaSessionCompat;
 import android.util.Log;
 import android.widget.Toast;
 
-import com.example.deakyu.musicplayerapp.MainActivity;
 import com.example.deakyu.musicplayerapp.R;
-import com.example.deakyu.musicplayerapp.database.MusicRepository;
+import com.example.deakyu.musicplayerapp.database.StorageUtil;
 import com.example.deakyu.musicplayerapp.model.Song;
-import com.example.deakyu.musicplayerapp.viewmodel.SongViewModel;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class MusicService extends Service implements MediaPlayer.OnPreparedListener,
@@ -52,6 +45,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     private int curIndex;
     private List<Song> songsFromDb;
     private int resumePosition;
+
+    private StorageUtil util;
 
     // Notification Intent actions
     public static final String ACTION_PLAY = "com.example.musicplayerapp.ACTION_PLAY";
@@ -180,13 +175,15 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
                 .setShowWhen(false)
                 .setStyle(new android.support.v4.media.app.NotificationCompat.MediaStyle()
                         .setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0))
+                        .setShowActionsInCompactView(0, 1, 2))
                 .setColor(getResources().getColor(R.color.colorPrimary))
                 .setLargeIcon(largeIcon)
                 .setSmallIcon(android.R.drawable.stat_sys_headset)
                 .setContentText(curSong.getArtist())
                 .setContentTitle(curSong.getTitle())
-                .addAction(notificationAction, "pause", play_pauseAction);
+                .addAction(android.R.drawable.ic_media_previous, "previous", playbackAction(3))
+                .addAction(notificationAction, "pause", play_pauseAction)
+                .addAction(android.R.drawable.ic_media_next, "next", playbackAction(2));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             notificationManager = NotificationManagerCompat.from(getApplicationContext());
@@ -207,6 +204,12 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             case 1:
                 playbackAction.setAction(ACTION_PAUSE);
                 return PendingIntent.getService(this, actionNumber, playbackAction, 0);
+            case 2:
+                playbackAction.setAction(ACTION_NEXT);
+                return PendingIntent.getService(this, actionNumber, playbackAction, 0);
+            case 3:
+                playbackAction.setAction(ACTION_PREV);
+                return PendingIntent.getService(this, actionNumber, playbackAction, 0);
             default:
                 break;
         }
@@ -225,6 +228,10 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             transportControls.pause();
         } else if (actionString.equalsIgnoreCase(ACTION_STOP)) {
             transportControls.stop();
+        } else if (actionString.equalsIgnoreCase(ACTION_NEXT)) {
+            transportControls.skipToNext();
+        } else if (actionString.equalsIgnoreCase(ACTION_PREV)) {
+            transportControls.skipToPrevious();
         }
     }
 
@@ -306,6 +313,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         curIndex = curIndex >= songsFromDb.size()-1 ? 0 : curIndex+1;
         curSong = songsFromDb.get(curIndex);
 
+        util.storeSongIndex(curIndex);
+
         stopMusic();
         mediaPlayer.reset();
         initMediaPlayer();
@@ -315,14 +324,16 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         curIndex = curIndex <= 0 ? songsFromDb.size()-1 : curIndex-1;
         curSong = songsFromDb.get(curIndex);
 
+        util.storeSongIndex(curIndex);
+
         stopMusic();
         mediaPlayer.reset();
         initMediaPlayer();
     }
 
-    public void playNewAudio(int songIndex) {
+    public void playNewAudio() {
         try {
-            curIndex = songIndex;
+            curIndex = util.loadSongIndex();
             curSong = songsFromDb.get(curIndex);
         } catch (NullPointerException e){
             e.printStackTrace();
@@ -347,12 +358,9 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         transportControls.seekTo(pos);
     }
 
-    public int getDuration() {
-        return mediaPlayer.getDuration();
-    }
-    public int getCurrentPosition() {
-        return mediaPlayer.getCurrentPosition();
-    }
+    public int getDuration() { return mediaPlayer.getDuration(); }
+    public int getCurrentPosition() { return mediaPlayer.getCurrentPosition(); }
+    public int getCurrentSongIndex() { return curIndex; }
 
     // endregion
 
@@ -367,9 +375,13 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
+        if(util == null) {
+            util = new StorageUtil(getApplicationContext());
+        }
+
         try {
-            curIndex = intent.getIntExtra("songIndex", 0);
-            songsFromDb = intent.getParcelableArrayListExtra("songs");
+            songsFromDb = util.loadSongs();
+            curIndex = util.loadSongIndex();
             curSong = songsFromDb.get(curIndex);
         } catch(NullPointerException e) {
             stopSelf();
@@ -401,6 +413,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         }
 
         removeNotification();
+        util.clearCachedSongList();
     }
 
     // endregion
