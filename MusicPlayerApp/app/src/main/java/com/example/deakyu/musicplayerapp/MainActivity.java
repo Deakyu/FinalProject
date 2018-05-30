@@ -43,9 +43,6 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     MusicService musicService;
     boolean serviceBound = false;
 
-    private Button shutdownServiceBtn;
-
-
     private SongListAdapter adapter;
     private SongViewModel songViewModel;
 
@@ -55,17 +52,6 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        shutdownServiceBtn = findViewById(R.id.shut_down_service_button);
-        shutdownServiceBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if(serviceBound) {
-                    unbindService(musicServiceConnection);
-                    musicService.stopSelf();
-                }
-            }
-        });
 
         setRecyclerView();
         setSongViewModel();
@@ -208,11 +194,6 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
             newAudioIntent.putExtra("curSong", song);
             sendBroadcast(newAudioIntent);
         }
-    }
-
-
-    private void dummy() {
-        System.out.println("Delete this function!!!!");
     }
 
 }

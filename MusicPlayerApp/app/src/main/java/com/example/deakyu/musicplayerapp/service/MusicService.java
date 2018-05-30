@@ -322,7 +322,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
                 curSong = intent.getExtras().getParcelable("curSong");
             } catch (NullPointerException e){
                 e.printStackTrace();
-                stopSelf();
+                Toast.makeText(context, "Error retrieving the song!", Toast.LENGTH_SHORT).show();
             }
             if(curSong != null) {
                 stopMusic();
