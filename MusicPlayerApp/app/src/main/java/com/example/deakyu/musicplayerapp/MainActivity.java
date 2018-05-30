@@ -3,13 +3,16 @@ package com.example.deakyu.musicplayerapp;
 import android.Manifest;
 import android.arch.lifecycle.Observer;
 import android.arch.lifecycle.ViewModelProviders;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -67,6 +70,8 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private TextView mediaTitle;
     private TextView mediaArtist;
     private SeekBar progressBar;
+    private TextView currentDurationPos;
+    private TextView totalDuration;
 
     // region Activity LifeCycle
 
@@ -76,6 +81,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         setContentView(R.layout.activity_main);
 
         mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
+        registerMediaReadyReceiver();
         setRecyclerView();
         setSongViewModel();
         setMediaControls();
@@ -98,6 +104,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        mLocalBroadcastManager.unregisterReceiver(mediaReadyReceiver);
     }
 
     // endregion
@@ -200,14 +207,16 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         skipNextBtn = findViewById(R.id.skip_next);
         skipPrevBtn = findViewById(R.id.skip_prev);
         progressBar = findViewById(R.id.progress_bar);
+        currentDurationPos = findViewById(R.id.progress_current);
+        totalDuration = findViewById(R.id.progress_remaining);
 
         pauseBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 pauseBtn.setVisibility(View.GONE);
                 playBtn.setVisibility(View.VISIBLE);
-                Intent pauseAudioIntent = new Intent(BROADCAST_PAUSE_AUDIO);
-                mLocalBroadcastManager.sendBroadcast(pauseAudioIntent);
+                if(serviceBound) musicService.pauseAudio();
+                mSeekbarUpdateHandler.removeCallbacks(mUpdateSeekbar);
             }
         });
 
@@ -216,8 +225,8 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
             public void onClick(View v) {
                 pauseBtn.setVisibility(View.VISIBLE);
                 playBtn.setVisibility(View.GONE);
-                Intent resumeAudioIntent = new Intent(BROADCAST_RESUME_AUDIO);
-                mLocalBroadcastManager.sendBroadcast(resumeAudioIntent);
+                if(serviceBound) musicService.resumeAudio();
+                mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 0);
             }
         });
 
@@ -244,6 +253,23 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
                 playPrev(curPos);
             }
         });
+
+        progressBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if(fromUser) {
+                    mSeekbarUpdateHandler.removeCallbacks(mUpdateSeekbar);
+                    musicService.seekTo(progress);
+                    mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 0);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
     }
 
     // endregion
@@ -265,7 +291,6 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private void playAudio(int songIndex) {
         if(!serviceBound) { // start a fresh service
             Intent intent = new Intent(this, MusicService.class);
-//            intent.putExtra("curSong", song);
             intent.putParcelableArrayListExtra("songs", (ArrayList)songsFromDb);
             intent.putExtra("songIndex", songIndex);
             startService(intent);
@@ -273,25 +298,19 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
             setUIAfterPlay(songIndex);
         } else { // Service is already running, so put different Song object
-            Intent newAudioIntent = new Intent(BROADCAST_PLAY_NEW_AUDIO);
-            newAudioIntent.putExtra("songIndex", songIndex);
-            mLocalBroadcastManager.sendBroadcast(newAudioIntent);
+            musicService.playNewAudio(songIndex);
 
             setUIAfterPlay(songIndex);
         }
     }
 
     private void playNext(int songIndex) {
-        Intent playNextIntent = new Intent(BROADCAST_PLAY_NEXT);
-        mLocalBroadcastManager.sendBroadcast(playNextIntent);
-
+        if(serviceBound) musicService.nextAudio();
         setUIAfterPlay(songIndex);
     }
 
     private void playPrev(int songIndex) {
-        Intent playPrevIntent = new Intent(BROADCAST_PLAY_PREV);
-        mLocalBroadcastManager.sendBroadcast(playPrevIntent);
-
+        if(serviceBound) musicService.prevAudio();
         setUIAfterPlay(songIndex);
     }
 
@@ -303,5 +322,32 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         mediaArtist.setText(songsFromDb.get(songIndex).getArtist());
         // TODO: https://stackoverflow.com/questions/17573972/how-can-i-display-album-art-using-mediastore-audio-albums-album-art/38873747
     }
+
+    private BroadcastReceiver mediaReadyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            int duration = musicService.getDuration();
+            String strDuration = MediaHelper.convertDurationToString(duration);
+            totalDuration.setText(strDuration);
+            progressBar.setMax(duration);
+            mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 0);
+        }
+    };
+
+    private void registerMediaReadyReceiver() {
+        IntentFilter filter = new IntentFilter(MusicService.BROADCAST_MEDIA_READY);
+        mLocalBroadcastManager.registerReceiver(mediaReadyReceiver, filter);
+    }
+
+    private Handler mSeekbarUpdateHandler = new Handler();
+    private Runnable mUpdateSeekbar = new Runnable() {
+        @Override
+        public void run() {
+            int curPos = musicService.getCurrentPosition();
+            progressBar.setProgress(curPos);
+            currentDurationPos.setText(MediaHelper.convertDurationToString(curPos));
+            mSeekbarUpdateHandler.postDelayed(this, 50);
+        }
+    };
 
 }

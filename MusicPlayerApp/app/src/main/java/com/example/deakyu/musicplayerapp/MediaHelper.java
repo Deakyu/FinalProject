@@ -10,6 +10,7 @@ import com.example.deakyu.musicplayerapp.model.Song;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public class MediaHelper {
     public static List<Song> getMusicFromStorage(Context activityContext) {
@@ -32,5 +33,12 @@ public class MediaHelper {
             } while(cursor.moveToNext());
         }
         return songList;
+    }
+
+    public static String convertDurationToString(int duration) {
+        return String.format("%02d:%02d",
+                TimeUnit.MILLISECONDS.toMinutes(duration),
+                TimeUnit.MILLISECONDS.toSeconds(duration)-
+                TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(duration)));
     }
 }

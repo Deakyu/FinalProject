@@ -51,6 +51,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     public static final String ACTION_PLAY = "com.example.musicplayerapp.ACTION_PLAY";
     public static final String ACTION_PAUSE = "com.example.musicplayerapp.ACTION_PAUSE";
     public static final String ACTION_STOP = "com.example.musicplayerapp.ACTION_STOP";
+    public static final String BROADCAST_MEDIA_READY = "com.example.musicplayerapp.MEDIA_READY";
 
     //MediaSession
     private MediaSessionManager mediaSessionManager;
@@ -224,7 +225,15 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public void onPrepared(MediaPlayer mediaPlayer) {
         Toast.makeText(getApplicationContext(), "onPrepared MediaPlayer", Toast.LENGTH_SHORT).show();
+        sendPreparedBroadcast(mediaPlayer);
         playMusic();
+    }
+
+    private LocalBroadcastManager mLocalBroadcastManager;
+
+    private void sendPreparedBroadcast(MediaPlayer mediaPlayer) {
+        Intent intent = new Intent(BROADCAST_MEDIA_READY);
+        mLocalBroadcastManager.sendBroadcast(intent);
     }
 
     @Override
@@ -313,6 +322,44 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         initMediaPlayer();
     }
 
+    public int getDuration() {
+        return mediaPlayer.getDuration();
+    }
+
+    public int getCurrentPosition() {
+        return mediaPlayer.getCurrentPosition();
+    }
+
+    public void playNewAudio(int songIndex) {
+        try {
+            curIndex = songIndex;
+            curSong = songsFromDb.get(curIndex);
+        } catch (NullPointerException e){
+            e.printStackTrace();
+            Toast.makeText(getApplicationContext(), "Error retrieving the song!", Toast.LENGTH_SHORT).show();
+        }
+        if(curSong != null) {
+            stopMusic();
+            mediaPlayer.reset();
+            initMediaPlayer();
+            updateMetadata();
+            buildNotification(PlaybackStatus.PLAYING);
+        }
+    }
+
+    public void pauseAudio() { transportControls.pause(); }
+
+    public void resumeAudio() { transportControls.play(); }
+
+    public void nextAudio() { transportControls.skipToNext(); }
+
+    public void prevAudio() { transportControls.skipToPrevious(); }
+
+    public void seekTo(int pos) {
+        mediaPlayer.seekTo(pos);
+        transportControls.seekTo(pos);
+    }
+
     // endregion
 
     // region Service LifeCycle
@@ -348,11 +395,6 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     public void onCreate() {
         super.onCreate();
         mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
-        registerPlayNewAudioReceiver();
-        registerPauseAudioReceiver();
-        registerResumeAudioReceiver();
-        registerPlayNextReceiver();
-        registerPlayPrevReceiver();
     }
 
     @Override
@@ -364,91 +406,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
             mediaPlayer.release();
         }
 
-        mLocalBroadcastManager.unregisterReceiver(playNewAudio);
-        mLocalBroadcastManager.unregisterReceiver(pauseAudio);
-        mLocalBroadcastManager.unregisterReceiver(resumeAudio);
-        mLocalBroadcastManager.unregisterReceiver(nextAudio);
-        mLocalBroadcastManager.unregisterReceiver(prevAudio);
         removeNotification();
-    }
-
-    // endregion
-
-    // region Broadcast Receivers
-
-    private LocalBroadcastManager mLocalBroadcastManager;
-
-    private BroadcastReceiver playNewAudio = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            try {
-                curIndex = intent.getIntExtra("songIndex", 0);
-                curSong = songsFromDb.get(curIndex);
-            } catch (NullPointerException e){
-                e.printStackTrace();
-                Toast.makeText(context, "Error retrieving the song!", Toast.LENGTH_SHORT).show();
-            }
-            if(curSong != null) {
-                stopMusic();
-                mediaPlayer.reset();
-                initMediaPlayer();
-                updateMetadata();
-                buildNotification(PlaybackStatus.PLAYING);
-            }
-        }
-    };
-
-    private BroadcastReceiver pauseAudio = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            transportControls.pause();
-        }
-    };
-
-    private BroadcastReceiver resumeAudio = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            transportControls.play();
-        }
-    };
-
-    private BroadcastReceiver nextAudio = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            transportControls.skipToNext();
-        }
-    };
-
-    private BroadcastReceiver prevAudio = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            transportControls.skipToPrevious();
-        }
-    };
-
-    private void registerPlayNewAudioReceiver() {
-        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_NEW_AUDIO);
-        mLocalBroadcastManager.registerReceiver(playNewAudio, filter);
-    }
-
-    private void registerPauseAudioReceiver() {
-        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PAUSE_AUDIO);
-        mLocalBroadcastManager.registerReceiver(pauseAudio, filter);
-    }
-
-    private void registerResumeAudioReceiver() {
-        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_RESUME_AUDIO);
-        mLocalBroadcastManager.registerReceiver(resumeAudio, filter);
-    }
-
-    private void registerPlayNextReceiver() {
-        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_NEXT);
-        mLocalBroadcastManager.registerReceiver(nextAudio, filter);
-    }
-
-    private void registerPlayPrevReceiver() {
-        IntentFilter filter = new IntentFilter(MainActivity.BROADCAST_PLAY_PREV);
-        mLocalBroadcastManager.registerReceiver(prevAudio, filter);
     }
 
     // endregion
