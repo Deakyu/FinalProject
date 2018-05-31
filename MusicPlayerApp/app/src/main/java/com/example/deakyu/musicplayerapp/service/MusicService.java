@@ -55,6 +55,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     public static final String ACTION_NEXT = "com.example.musicplayerapp.ACTION_NEXT";
     public static final String ACTION_PREV = "com.example.musicplayerapp.ACTION_PREV";
     public static final String BROADCAST_MEDIA_READY = "com.example.musicplayerapp.MEDIA_READY";
+    public static final String BROADCAST_PLAYSTATE_CHANGE = "com.example.musicplayerapp.PLAYSTATE_CHANGE";
 
     //MediaSession
     private MediaSessionManager mediaSessionManager;
@@ -224,14 +225,18 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         String actionString = playbackAction.getAction();
         if (actionString.equalsIgnoreCase(ACTION_PLAY)) {
             transportControls.play();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
         } else if (actionString.equalsIgnoreCase(ACTION_PAUSE)) {
             transportControls.pause();
+            playStateChangeBroadcast(PlaybackStatus.PAUSED);
         } else if (actionString.equalsIgnoreCase(ACTION_STOP)) {
             transportControls.stop();
         } else if (actionString.equalsIgnoreCase(ACTION_NEXT)) {
             transportControls.skipToNext();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
         } else if (actionString.equalsIgnoreCase(ACTION_PREV)) {
             transportControls.skipToPrevious();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
         }
     }
 
@@ -248,6 +253,12 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     private void sendPreparedBroadcast() {
         Intent intent = new Intent(BROADCAST_MEDIA_READY);
+        mLocalBroadcastManager.sendBroadcast(intent);
+    }
+
+    private void playStateChangeBroadcast(PlaybackStatus status) {
+        Intent intent = new Intent(BROADCAST_PLAYSTATE_CHANGE);
+        intent.putExtra("playbackStatus", status);
         mLocalBroadcastManager.sendBroadcast(intent);
     }
 
@@ -273,6 +284,9 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public void onCompletion(MediaPlayer mediaPlayer) {
         Toast.makeText(getApplicationContext(), "onCompletion MediaPlayer", Toast.LENGTH_SHORT).show();
+
+        // TODO: play next with transport control
+        transportControls.skipToNext();
 
         stopMusic();
         stopSelf();

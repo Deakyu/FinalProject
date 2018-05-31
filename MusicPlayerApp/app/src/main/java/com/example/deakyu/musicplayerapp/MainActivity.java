@@ -37,6 +37,7 @@ import com.example.deakyu.musicplayerapp.adapter.SongListAdapter;
 import com.example.deakyu.musicplayerapp.database.StorageUtil;
 import com.example.deakyu.musicplayerapp.service.MusicService;
 import com.example.deakyu.musicplayerapp.model.Song;
+import com.example.deakyu.musicplayerapp.service.PlaybackStatus;
 import com.example.deakyu.musicplayerapp.viewmodel.SongViewModel;
 
 import java.util.ArrayList;
@@ -78,6 +79,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
         mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
         registerMediaReadyReceiver();
+        registerPlayStateReceiver();
         setRecyclerView();
         setSongViewModel();
         setMediaControls();
@@ -101,6 +103,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     protected void onDestroy() {
         super.onDestroy();
         mLocalBroadcastManager.unregisterReceiver(mediaReadyReceiver);
+        mLocalBroadcastManager.unregisterReceiver(playStateReceiver);
     }
 
     // endregion
@@ -347,9 +350,28 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         }
     };
 
+    private BroadcastReceiver playStateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            PlaybackStatus status = (PlaybackStatus) intent.getSerializableExtra("playbackStatus");
+            if(status == PlaybackStatus.PAUSED) {
+                playBtn.setVisibility(View.VISIBLE);
+                pauseBtn.setVisibility(View.GONE);
+            } else if (status == PlaybackStatus.PLAYING) {
+                playBtn.setVisibility(View.GONE);
+                pauseBtn.setVisibility(View.VISIBLE);
+            }
+        }
+    };
+
     private void registerMediaReadyReceiver() {
         IntentFilter filter = new IntentFilter(MusicService.BROADCAST_MEDIA_READY);
         mLocalBroadcastManager.registerReceiver(mediaReadyReceiver, filter);
+    }
+
+    private void registerPlayStateReceiver() {
+        IntentFilter filter = new IntentFilter(MusicService.BROADCAST_PLAYSTATE_CHANGE);
+        mLocalBroadcastManager.registerReceiver(playStateReceiver, filter);
     }
 
     private Handler mSeekbarUpdateHandler = new Handler();
