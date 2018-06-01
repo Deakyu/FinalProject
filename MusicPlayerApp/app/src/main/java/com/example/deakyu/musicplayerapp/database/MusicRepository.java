@@ -4,43 +4,33 @@ import android.app.Application;
 import android.arch.lifecycle.LiveData;
 import android.os.AsyncTask;
 
-import com.example.deakyu.musicplayerapp.dao.PlaylistDao;
 import com.example.deakyu.musicplayerapp.dao.SongDao;
-import com.example.deakyu.musicplayerapp.dao.SongPlaylistJoinDao;
-import com.example.deakyu.musicplayerapp.model.Playlist;
 import com.example.deakyu.musicplayerapp.model.Song;
-import com.example.deakyu.musicplayerapp.model.SongPlaylistJoin;
 
 import java.util.List;
 
 public class MusicRepository {
     private SongDao mSongDao;
-    private PlaylistDao mPlaylistDao;
-    private SongPlaylistJoinDao mSongPlaylistJoinDao;
 
     private LiveData<List<Song>> mAllSongs;
-    private LiveData<List<Playlist>> mAllPlaylists;
+
+    private MusicDatabase db;
 
     public MusicRepository(Application app) {
-        MusicDatabase db = MusicDatabase.getDatabase(app);
+        db = MusicDatabase.getDatabase(app);
         mSongDao = db.songDao();
-        mPlaylistDao = db.playlistDao();
-        mSongPlaylistJoinDao = db.songPlaylistJoinDao();
 
         mAllSongs = mSongDao.getAllSongs();
-        mAllPlaylists = mPlaylistDao.getAllPlaylists();
     }
 
     public LiveData<List<Song>> getAllSongs() { return mAllSongs; }
-    public LiveData<List<Playlist>> getAllPlaylists() { return mAllPlaylists; }
-    public LiveData<List<Song>> getSongsByPlaylistId(long playlistId) {
-        return mSongPlaylistJoinDao.getSongsByPlaylistId(playlistId);
-    }
 
     public void insertSong(Song song) { new insertSongAsync(mSongDao).execute(song); }
-    public void insertPlaylist(Playlist playlist) { new insertPlaylistAsync(mPlaylistDao).execute(playlist); }
-    public void insertSongPlaylistJoin(SongPlaylistJoin songPlaylistJoin) {
-        new insertSongPlaylistAsync(mSongPlaylistJoinDao).execute(songPlaylistJoin);
+
+    public void deleteAllSongs() { new deleteSongsAsync(mSongDao).execute(); }
+
+    public void refreshSongs(final List<Song> newSongs) {
+        new refreshSongsAsync(mSongDao).execute(newSongs);
     }
 
     private static class insertSongAsync extends AsyncTask<Song, Void, Void> {
@@ -57,31 +47,33 @@ public class MusicRepository {
         }
     }
 
-    private static class insertPlaylistAsync extends AsyncTask<Playlist, Void, Void> {
-        private PlaylistDao mAsyncPlaylistDao;
+    private static class deleteSongsAsync extends AsyncTask<Void, Void, Void> {
+        private SongDao mAsyncSongDao;
 
-        insertPlaylistAsync(PlaylistDao dao) {
-            mAsyncPlaylistDao = dao;
-        }
+        deleteSongsAsync(SongDao dao) { mAsyncSongDao = dao; }
 
         @Override
-        protected Void doInBackground(Playlist... playlists) {
-            mAsyncPlaylistDao.insert(playlists[0]);
+        protected Void doInBackground(Void... voids) {
+            mAsyncSongDao.deleteAll();
             return null;
         }
     }
 
-    private static class insertSongPlaylistAsync extends AsyncTask<SongPlaylistJoin, Void, Void> {
-        private SongPlaylistJoinDao mAsyncDao;
+    private static class refreshSongsAsync extends AsyncTask<List<Song>, Void, Void> {
 
-        insertSongPlaylistAsync(SongPlaylistJoinDao dao) {
-            mAsyncDao = dao;
+         private SongDao mAsyncSongDao;
+
+        refreshSongsAsync(SongDao mAsyncSongDao) {
+            this.mAsyncSongDao = mAsyncSongDao;
         }
 
         @Override
-        protected Void doInBackground(SongPlaylistJoin... songPlaylistJoins) {
-            mAsyncDao.insert(songPlaylistJoins[0]);
+        protected Void doInBackground(final List<Song>... lists) {
+            mAsyncSongDao.deleteAll();
+            for(int i=0 ; i < lists[0].size() ; i++)
+                mAsyncSongDao.insert(lists[0].get(i));
             return null;
         }
     }
+
 }
