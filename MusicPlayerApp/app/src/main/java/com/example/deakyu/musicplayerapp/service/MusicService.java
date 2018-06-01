@@ -66,7 +66,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     //AudioPlayer notification ID
     private static final int NOTIFICATION_ID = 101;
 
-    // region Init Methods
+    // region Init MediaSession & MediaPlayer methods
 
     private void initMediaPlayer() {
         Uri contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, curSong.getMusicId());
@@ -80,7 +80,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         try {
             mediaPlayer.setDataSource(getApplicationContext(), contentUri);
         } catch (Exception e) {
-            Toast.makeText(getApplicationContext(), "Error from mediaPlayer.setDataSource()", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "Music Not Found", Toast.LENGTH_SHORT).show();
             e.printStackTrace();
             stopSelf();
         }
@@ -156,7 +156,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     // endregion
 
-    // region notification methods
+    // region Notification Methods
 
     private void buildNotification(PlaybackStatus playbackStatus) {
         int notificationAction;
@@ -219,32 +219,10 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     // endregion
 
-    private void handleIncomingActions(Intent playbackAction) {
-        if(playbackAction == null || playbackAction.getAction() == null) return;
-
-        String actionString = playbackAction.getAction();
-        if (actionString.equalsIgnoreCase(ACTION_PLAY)) {
-            transportControls.play();
-            playStateChangeBroadcast(PlaybackStatus.PLAYING);
-        } else if (actionString.equalsIgnoreCase(ACTION_PAUSE)) {
-            transportControls.pause();
-            playStateChangeBroadcast(PlaybackStatus.PAUSED);
-        } else if (actionString.equalsIgnoreCase(ACTION_STOP)) {
-            transportControls.stop();
-        } else if (actionString.equalsIgnoreCase(ACTION_NEXT)) {
-            transportControls.skipToNext();
-            playStateChangeBroadcast(PlaybackStatus.PLAYING);
-        } else if (actionString.equalsIgnoreCase(ACTION_PREV)) {
-            transportControls.skipToPrevious();
-            playStateChangeBroadcast(PlaybackStatus.PLAYING);
-        }
-    }
-
     // region MediaPlayer Listeners
 
     @Override
     public void onPrepared(MediaPlayer mediaPlayer) {
-        Toast.makeText(getApplicationContext(), "onPrepared MediaPlayer", Toast.LENGTH_SHORT).show();
         sendPreparedBroadcast();
         playMusic();
     }
@@ -264,7 +242,6 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     @Override
     public boolean onError(MediaPlayer mediaPlayer, int type, int info) {
-        Toast.makeText(getApplicationContext(), "onError MediaPlayer", Toast.LENGTH_SHORT).show();
 
         switch (type) {
             case MediaPlayer.MEDIA_ERROR_NOT_VALID_FOR_PROGRESSIVE_PLAYBACK:
@@ -283,9 +260,6 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     @Override
     public void onCompletion(MediaPlayer mediaPlayer) {
-        Toast.makeText(getApplicationContext(), "onCompletion MediaPlayer", Toast.LENGTH_SHORT).show();
-
-        // TODO: play next with transport control
         transportControls.skipToNext();
 
         stopMusic();
@@ -294,7 +268,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
     @Override
     public void onSeekComplete(MediaPlayer mediaPlayer) {
-        Toast.makeText(getApplicationContext(), "onSeekComplete MediaPlayer", Toast.LENGTH_SHORT).show();
+
     }
 
     // endregion
@@ -372,6 +346,7 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
         transportControls.seekTo(pos);
     }
 
+    public boolean getIsPlaying() { return mediaPlayer.isPlaying(); }
     public int getDuration() { return mediaPlayer.getDuration(); }
     public int getCurrentPosition() { return mediaPlayer.getCurrentPosition(); }
     public int getCurrentSongIndex() { return curIndex; }
@@ -389,9 +364,8 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
 
-        if(util == null) {
+        if(util == null)
             util = new StorageUtil(getApplicationContext());
-        }
 
         try {
             songsFromDb = util.loadSongs();
@@ -428,6 +402,34 @@ public class MusicService extends Service implements MediaPlayer.OnPreparedListe
 
         removeNotification();
         util.clearCachedSongList();
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        removeNotification();
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
+    }
+
+    private void handleIncomingActions(Intent playbackAction) {
+        if(playbackAction == null || playbackAction.getAction() == null) return;
+
+        String actionString = playbackAction.getAction();
+        if (actionString.equalsIgnoreCase(ACTION_PLAY)) {
+            transportControls.play();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
+        } else if (actionString.equalsIgnoreCase(ACTION_PAUSE)) {
+            transportControls.pause();
+            playStateChangeBroadcast(PlaybackStatus.PAUSED);
+        } else if (actionString.equalsIgnoreCase(ACTION_STOP)) {
+            transportControls.stop();
+        } else if (actionString.equalsIgnoreCase(ACTION_NEXT)) {
+            transportControls.skipToNext();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
+        } else if (actionString.equalsIgnoreCase(ACTION_PREV)) {
+            transportControls.skipToPrevious();
+            playStateChangeBroadcast(PlaybackStatus.PLAYING);
+        }
     }
 
     // endregion

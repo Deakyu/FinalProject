@@ -10,6 +10,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
@@ -22,12 +23,17 @@ import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.CardView;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -47,18 +53,20 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
     private static final String TAG = MainActivity.class.getSimpleName();
     private static final int EXTERNAL_STORAGE_PERMISSION_REQUEST = 1;
+    private static final String FIRST_RUN = "com.example.deakyu.musicplayerapp.FIRST_RUN";
 
     private LocalBroadcastManager mLocalBroadcastManager;
 
-    List<Song> songList;
-    List<Song> songsFromDb;
-    int curPos;
-    MusicService musicService;
-    boolean serviceBound = false;
+    private List<Song> songList;
+    private List<Song> songsFromDb;
+    private int curPos;
+    private MusicService musicService;
+    private boolean serviceBound = false;
 
     private SongListAdapter adapter;
     private SongViewModel songViewModel;
 
+    private CardView mediaControls;
     private ImageButton pauseBtn;
     private ImageButton playBtn;
     private ImageButton skipPrevBtn;
@@ -69,6 +77,9 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private SeekBar progressBar;
     private TextView currentDurationPos;
     private TextView totalDuration;
+    private ProgressBar loader;
+
+    private SharedPreferences prefs = null;
 
     // region Activity LifeCycle
 
@@ -77,14 +88,28 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        prefs = getSharedPreferences(FIRST_RUN, MODE_PRIVATE);
+
         mLocalBroadcastManager = LocalBroadcastManager.getInstance(this);
         registerMediaReadyReceiver();
         registerPlayStateReceiver();
         setRecyclerView();
         setSongViewModel();
         setMediaControls();
+        handleMediaControllerVisibility(false);
 
         executeRuntimePermission(); // Don't try to access files from here below
+    }
+
+    @Override
+    protected void onStart() {
+        if(serviceBound) {
+            if(musicService.getIsPlaying()) {
+                mSeekbarUpdateHandler.removeCallbacks(mUpdateSeekbar);
+                mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 10);
+            }
+        }
+        super.onStart();
     }
 
     @Override
@@ -104,6 +129,23 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         super.onDestroy();
         mLocalBroadcastManager.unregisterReceiver(mediaReadyReceiver);
         mLocalBroadcastManager.unregisterReceiver(playStateReceiver);
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        MenuInflater inflater = getMenuInflater();
+        inflater.inflate(R.menu.menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if(loader != null && loader.getVisibility() == View.GONE)
+            loader.setVisibility(View.VISIBLE);
+        songList = MediaHelper.getMusicFromStorage(this);
+        if(songViewModel != null)
+            songViewModel.refreshSongs(songList);
+        return true;
     }
 
     // endregion
@@ -159,14 +201,20 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     }
 
     private void continueWithPermission() { // Permission granted, proceed to work
-        songList = MediaHelper.getMusicFromStorage(this); // Songs from storage
+        songList = MediaHelper.getMusicFromStorage(this);
 
+        if(prefs.getBoolean("firstrun", true)) { // FIRST APP RUN
+            // Set Loader to spin
+            loader.setVisibility(View.VISIBLE);
 
-        songViewModel.refreshSongs(songList);
-        // TODO: Strategy to only insert these for the first time the user enters the app
-//        for(int i=0 ; i < songList.size() ; i++) {
-//            songViewModel.insert(songList.get(i));
-//        }
+            // Insert Songs from storage
+            for(int i=0 ; i < songList.size() ; i++)
+                songViewModel.insert(songList.get(i));
+
+            // Set firstrun to false
+            prefs.edit().putBoolean("firstrun", false).apply();
+        }
+
     }
 
     // endregion
@@ -178,7 +226,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         adapter = new SongListAdapter(this);
         recyclerView.setAdapter(adapter);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
-        adapter.setClickListener(this); // onClick Listener for each item view
+        adapter.setClickListener(this);
     }
 
     private void setSongViewModel() {
@@ -187,6 +235,9 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         songViewModel.getAllSongs().observe(this, new Observer<List<Song>>() {
             @Override
             public void onChanged(@Nullable List<Song> songs) {
+                if(loader != null && loader.getVisibility() == View.VISIBLE)
+                    loader.setVisibility(View.GONE);
+
                 songsFromDb = songs;
                 adapter.setSongs(songsFromDb);
             }
@@ -194,12 +245,13 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     }
 
     @Override
-    public void onClick(View view, int pos) {
+    public void onClick(View view, int pos) { // onClick Listener for each item view (Recycler)
         curPos = pos;
         playAudio(pos);
     }
 
     private void setMediaControls() {
+        mediaControls = findViewById(R.id.media_controller);
         album = findViewById(R.id.album);
         mediaTitle = findViewById(R.id.media_title);
         mediaArtist = findViewById(R.id.media_artist);
@@ -210,6 +262,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         progressBar = findViewById(R.id.progress_bar);
         currentDurationPos = findViewById(R.id.progress_current);
         totalDuration = findViewById(R.id.progress_remaining);
+        loader = findViewById(R.id.loader);
 
         pauseBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -234,11 +287,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         skipNextBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(curPos >= songsFromDb.size() - 1) {
-                    curPos = 0;
-                } else {
-                    curPos++;
-                }
+                curPos = curPos >= songsFromDb.size() - 1 ? 0 : curPos+1;
                 playNext(curPos);
             }
         });
@@ -246,11 +295,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
         skipPrevBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if(curPos <= 0) {
-                    curPos = songsFromDb.size()-1;
-                } else {
-                    curPos--;
-                }
+                curPos = curPos <= 0 ? songsFromDb.size() - 1 : curPos--;
                 playPrev(curPos);
             }
         });
@@ -275,19 +320,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
     // endregion
 
-    private ServiceConnection musicServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-            MusicService.MyBinder binder = (MusicService.MyBinder) iBinder;
-            musicService = binder.getService();
-            serviceBound = true;
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName componentName) {
-            serviceBound = false;
-        }
-    };
+    // region Audio methods
 
     private StorageUtil util;
 
@@ -332,8 +365,11 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
         mediaTitle.setText(songsFromDb.get(songIndex).getTitle());
         mediaArtist.setText(songsFromDb.get(songIndex).getArtist());
-        // TODO: https://stackoverflow.com/questions/17573972/how-can-i-display-album-art-using-mediastore-audio-albums-album-art/38873747
     }
+
+    // endregion
+
+    // region Broadcast Receivers
 
     private BroadcastReceiver mediaReadyReceiver = new BroadcastReceiver() {
         @Override
@@ -346,7 +382,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
 
             totalDuration.setText(strDuration);
             progressBar.setMax(duration);
-            mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 0);
+            mSeekbarUpdateHandler.postDelayed(mUpdateSeekbar, 10);
         }
     };
 
@@ -381,8 +417,35 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
             int curPos = musicService.getCurrentPosition();
             progressBar.setProgress(curPos);
             currentDurationPos.setText(MediaHelper.convertDurationToString(curPos));
-            mSeekbarUpdateHandler.postDelayed(this, 50);
+            mSeekbarUpdateHandler.postDelayed(this, 10);
         }
     };
 
+    private void handleMediaControllerVisibility(boolean isServiceConnected) {
+        if (isServiceConnected) {
+            mediaControls.setVisibility(View.VISIBLE);
+        } else {
+            mediaControls.setVisibility(View.GONE);
+        }
+    }
+
+    // endregion
+
+    private ServiceConnection musicServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            MusicService.MyBinder binder = (MusicService.MyBinder) iBinder;
+            musicService = binder.getService();
+            serviceBound = true;
+            // Display media controls, title, artist, duration
+            handleMediaControllerVisibility(true);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            serviceBound = false;
+            // Hide media controls, title, artist, duration
+            handleMediaControllerVisibility(false);
+        }
+    };
 }

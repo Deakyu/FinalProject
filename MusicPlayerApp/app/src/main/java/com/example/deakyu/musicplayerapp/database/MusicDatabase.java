@@ -1,20 +1,15 @@
 package com.example.deakyu.musicplayerapp.database;
 
-import android.arch.persistence.db.SupportSQLiteDatabase;
 import android.arch.persistence.room.Database;
 import android.arch.persistence.room.Room;
 import android.arch.persistence.room.RoomDatabase;
 import android.content.Context;
-import android.os.AsyncTask;
-import android.support.annotation.NonNull;
 
 import com.example.deakyu.musicplayerapp.dao.SongDao;
-import com.example.deakyu.musicplayerapp.model.Playlist;
 import com.example.deakyu.musicplayerapp.model.Song;
-import com.example.deakyu.musicplayerapp.model.SongPlaylistJoin;
 
 @Database(entities = {Song.class},
-          version = 3)
+          version = 4)
 public abstract class MusicDatabase extends RoomDatabase {
     public abstract SongDao songDao();
 

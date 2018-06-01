@@ -30,7 +30,7 @@ public class MusicRepository {
     public void deleteAllSongs() { new deleteSongsAsync(mSongDao).execute(); }
 
     public void refreshSongs(final List<Song> newSongs) {
-        new refreshSongsAsync(db, this).execute(newSongs);
+        new refreshSongsAsync(mSongDao).execute(newSongs);
     }
 
     private static class insertSongAsync extends AsyncTask<Song, Void, Void> {
@@ -61,25 +61,17 @@ public class MusicRepository {
 
     private static class refreshSongsAsync extends AsyncTask<List<Song>, Void, Void> {
 
-        private MusicDatabase db;
-        private MusicRepository repo;
+         private SongDao mAsyncSongDao;
 
-        refreshSongsAsync(MusicDatabase db, MusicRepository repo) {
-            this.db = db;
-            this.repo = repo;
+        refreshSongsAsync(SongDao mAsyncSongDao) {
+            this.mAsyncSongDao = mAsyncSongDao;
         }
 
         @Override
         protected Void doInBackground(final List<Song>... lists) {
-            db.runInTransaction(new Runnable() {
-                @Override
-                public void run() {
-                    repo.deleteAllSongs();
-                    for(int i=0 ; i < lists[0].size() ; i++) {
-                        repo.insertSong(lists[0].get(i));
-                    }
-                }
-            });
+            mAsyncSongDao.deleteAll();
+            for(int i=0 ; i < lists[0].size() ; i++)
+                mAsyncSongDao.insert(lists[0].get(i));
             return null;
         }
     }
