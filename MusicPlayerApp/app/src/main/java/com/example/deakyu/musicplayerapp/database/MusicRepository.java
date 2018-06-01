@@ -27,8 +27,6 @@ public class MusicRepository {
 
     public void insertSong(Song song) { new insertSongAsync(mSongDao).execute(song); }
 
-    public void deleteAllSongs() { new deleteSongsAsync(mSongDao).execute(); }
-
     public void refreshSongs(final List<Song> newSongs) {
         new refreshSongsAsync(mSongDao).execute(newSongs);
     }
@@ -43,18 +41,6 @@ public class MusicRepository {
         @Override
         protected Void doInBackground(Song... songs) {
             mAsyncSongDao.insert(songs[0]);
-            return null;
-        }
-    }
-
-    private static class deleteSongsAsync extends AsyncTask<Void, Void, Void> {
-        private SongDao mAsyncSongDao;
-
-        deleteSongsAsync(SongDao dao) { mAsyncSongDao = dao; }
-
-        @Override
-        protected Void doInBackground(Void... voids) {
-            mAsyncSongDao.deleteAll();
             return null;
         }
     }

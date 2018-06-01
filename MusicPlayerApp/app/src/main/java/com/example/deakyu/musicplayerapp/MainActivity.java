@@ -17,6 +17,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.constraint.ConstraintLayout;
+import android.support.constraint.ConstraintSet;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.LocalBroadcastManager;
@@ -30,6 +32,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -66,6 +69,8 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private SongListAdapter adapter;
     private SongViewModel songViewModel;
 
+    private RecyclerView recyclerView;
+    private ConstraintLayout mediaWrapper;
     private CardView mediaControls;
     private ImageButton pauseBtn;
     private ImageButton playBtn;
@@ -222,7 +227,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     // region UI setup + ViewModel
 
     private void setRecyclerView() {
-        RecyclerView recyclerView = findViewById(R.id.recycler_view);
+        recyclerView = findViewById(R.id.recycler_view);
         adapter = new SongListAdapter(this);
         recyclerView.setAdapter(adapter);
         recyclerView.setLayoutManager(new LinearLayoutManager(this));
@@ -251,6 +256,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     }
 
     private void setMediaControls() {
+        mediaWrapper = findViewById(R.id.media_wrapper);
         mediaControls = findViewById(R.id.media_controller);
         album = findViewById(R.id.album);
         mediaTitle = findViewById(R.id.media_title);
@@ -424,6 +430,7 @@ public class MainActivity extends AppCompatActivity implements ItemClickListener
     private void handleMediaControllerVisibility(boolean isServiceConnected) {
         if (isServiceConnected) {
             mediaControls.setVisibility(View.VISIBLE);
+
         } else {
             mediaControls.setVisibility(View.GONE);
         }
